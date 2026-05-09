@@ -135,37 +135,65 @@ CARD_GRID_CSS = """
     cursor: not-allowed !important;
 }
 
-/* === Mobile (≤ 768px): horizontally scrollable rows ========================== */
+/* === Mobile (≤ 768px): re-flow as 4 columns × 13 rows ======================== */
+/*
+ * Streamlit auto-stacks columns vertically on narrow viewports, which would
+ * give us a single 52-card column. To override that, we turn the whole grid
+ * container into a CSS Grid, flatten the per-suit `stHorizontalBlock` rows
+ * with `display: contents`, and use `grid-auto-flow: column` so the existing
+ * suit-major button order (♠2..♠A, ♥2..♥A, ♦2..♦A, ♣2..♣A) fills the grid
+ * column-by-column. Result on mobile:
+ *
+ *     ♠2  ♥2  ♦2  ♣2
+ *     ♠3  ♥3  ♦3  ♣3
+ *     ...
+ *     ♠A  ♥A  ♦A  ♣A
+ *
+ *  4 columns (one per suit), 13 rows (one per rank). All 52 cards visible
+ *  on screen with normal vertical scroll.
+ */
 
 @media (max-width: 768px) {
-    /* Each row of 13 cards becomes a horizontal scroll track. */
-    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
-        [data-testid="stHorizontalBlock"] {
-        flex-wrap: nowrap !important;
-        overflow-x: auto !important;
-        overflow-y: hidden !important;
-        -webkit-overflow-scrolling: touch;
-        scroll-snap-type: x proximity;
-        scrollbar-width: thin;
-        padding-bottom: 6px;
-        gap: 6px !important;
+    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker) {
+        display: grid !important;
+        grid-template-columns: repeat(4, 1fr) !important;
+        grid-template-rows: repeat(13, auto) !important;
+        grid-auto-flow: column !important;
+        gap: 4px !important;
+        row-gap: 4px !important;
+        column-gap: 4px !important;
     }
 
-    /* Each column refuses to shrink so the row can overflow and scroll. */
+    /* The marker div would otherwise occupy the first grid cell. Hide it from
+       layout — :has() still recognises it in the DOM. */
     [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
-        [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
-        flex: 0 0 auto !important;
-        width: 52px !important;
-        min-width: 52px !important;
-        max-width: 52px !important;
-        scroll-snap-align: start;
+        > [data-testid="stMarkdownContainer"]:first-child {
+        display: none !important;
     }
 
-    /* Slightly smaller cards but still tappable (52×60 ≥ 44pt iOS target). */
+    /* Flatten the suit-row flex containers so their children (stColumns)
+       become direct grid items of the parent. */
+    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
+        > [data-testid="stHorizontalBlock"] {
+        display: contents !important;
+    }
+
+    /* Each column is now a grid cell — strip the flex sizing Streamlit gave it. */
+    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
+        [data-testid="stColumn"] {
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        flex: none !important;
+    }
+
+    /* Compact-but-tappable card buttons (≥ 44pt iOS minimum). */
     [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
         [data-testid="stButton"] > button {
-        height: 60px !important;
-        font-size: 15px !important;
+        height: 54px !important;
+        font-size: 14px !important;
+        padding: 4px 0 !important;
+        line-height: 1.1 !important;
     }
 }
 
