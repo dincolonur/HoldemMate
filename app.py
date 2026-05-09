@@ -8,14 +8,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from holdemmate.cards import (
-    RANKS,
-    SUITS,
-    SUIT_LABELS,
-    SUIT_SYMBOLS_EMOJI,
-    card_code,
-    pretty_html,
-)
+from holdemmate.card_picker import card_picker
+from holdemmate.cards import pretty_html
 from holdemmate.config import get_settings
 from holdemmate.game_state import GameState
 from holdemmate.graph import recommend
@@ -67,143 +61,23 @@ _require_password()
 
 # ---------- Card-grid CSS --------------------------------------------------------
 #
-# We scope all "card button" styling to a Streamlit container that contains a
-# tiny invisible marker div (`.hm-card-grid-marker`). The CSS `:has()` selector
-# walks up to that container and styles only the buttons inside it, leaving the
-# rest of the app's buttons (Run, Back, Continue, etc.) untouched.
+# We scope all "card button" styling to the Streamlit container created with
+# `st.container(key="hm_card_grid")`. Streamlit renders that container as a
+# div carrying the class `.st-key-hm_card_grid`, which gives us a stable,
+# predictable hook to target with CSS — no `:has()` tricks, no marker divs,
+# robust against Streamlit's internal DOM rearrangements between versions.
 
 CARD_GRID_CSS = """
 <style>
-:root {
-    --card-bg: #ffffff;
-    --card-border: #cbd5e1;
-    --card-border-hover: #2563eb;
-    --card-selected-bg: #dbeafe;
-    --card-selected-border: #2563eb;
-    --card-selected-text: #1e3a8a;
-}
-
-/* === Card grid (desktop defaults) ============================================ */
-
-/* Hide the marker entirely — it's only there as a hook for :has() selectors,
-   and we don't want it taking a grid cell on mobile or any visual space on
-   desktop. Robust against any future Streamlit DOM nesting changes. */
-.hm-card-grid-marker { display: none !important; }
-[data-testid="stMarkdownContainer"]:has(.hm-card-grid-marker) {
-    display: none !important;
-}
-
-/* Tighten the column gaps so 13 cards fit comfortably */
-[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
-    [data-testid="stHorizontalBlock"] {
-    gap: 4px !important;
-    margin-bottom: 4px !important;
-}
-
-/* Each card button */
-[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
-    [data-testid="stButton"] > button {
-    width: 100% !important;
-    min-width: 0 !important;
-    height: 64px !important;
-    padding: 4px 0 !important;
-    font-size: 17px !important;
-    font-weight: 700 !important;
-    line-height: 1.15 !important;
-    background: var(--card-bg) !important;
-    border: 1px solid var(--card-border) !important;
-    border-radius: 8px !important;
-    color: #111827 !important;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    white-space: pre-line !important;
-    transition: transform 0.05s ease, box-shadow 0.1s ease;
-}
-
-[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
-    [data-testid="stButton"] > button:hover:not(:disabled) {
-    border-color: var(--card-border-hover) !important;
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
-    transform: translateY(-1px);
-}
-
-/* Selected = primary kind */
-[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
-    [data-testid="stButton"] > button[kind="primary"],
-[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
-    [data-testid="stButton"] > button[kind="primaryFormSubmit"] {
-    background: var(--card-selected-bg) !important;
-    border: 2px solid var(--card-selected-border) !important;
-    color: var(--card-selected-text) !important;
-}
-
-/* Disabled = used elsewhere */
-[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
-    [data-testid="stButton"] > button:disabled {
-    opacity: 0.3 !important;
-    cursor: not-allowed !important;
-}
-
-/* === Mobile (≤ 768px): re-flow as 4 columns × 13 rows ======================== */
 /*
- * Streamlit auto-stacks columns vertically on narrow viewports, which would
- * give us a single 52-card column. To override that, we turn the whole grid
- * container into a CSS Grid, flatten the per-suit `stHorizontalBlock` rows
- * with `display: contents`, and use `grid-auto-flow: column` so the existing
- * suit-major button order (♠2..♠A, ♥2..♥A, ♦2..♦A, ♣2..♣A) fills the grid
- * column-by-column. Result on mobile:
+ * The card grid is rendered by a custom Streamlit component (see
+ * holdemmate/card_picker/), which lives in an iframe with its own CSS.
+ * Streamlit's stylesheet cannot reach inside the iframe, so the picker is
+ * immune to mobile column-stacking and other DOM rearrangements.
  *
- *     ♠2  ♥2  ♦2  ♣2
- *     ♠3  ♥3  ♦3  ♣3
- *     ...
- *     ♠A  ♥A  ♦A  ♣A
- *
- *  4 columns (one per suit), 13 rows (one per rank). All 52 cards visible
- *  on screen with normal vertical scroll.
+ * The CSS in this block now only handles app-level chrome: the
+ * recommendation banner, action-row stacking, and small mobile tweaks.
  */
-
-@media (max-width: 768px) {
-    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker) {
-        display: grid !important;
-        grid-template-columns: repeat(4, 1fr) !important;
-        grid-template-rows: repeat(13, auto) !important;
-        grid-auto-flow: column !important;
-        gap: 4px !important;
-        row-gap: 4px !important;
-        column-gap: 4px !important;
-    }
-
-    /* The marker div would otherwise occupy the first grid cell. Hide it from
-       layout — :has() still recognises it in the DOM. */
-    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
-        > [data-testid="stMarkdownContainer"]:first-child {
-        display: none !important;
-    }
-
-    /* Flatten the suit-row flex containers so their children (stColumns)
-       become direct grid items of the parent. */
-    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
-        > [data-testid="stHorizontalBlock"] {
-        display: contents !important;
-    }
-
-    /* Each column is now a grid cell — strip the flex sizing Streamlit gave it. */
-    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
-        [data-testid="stColumn"] {
-        width: auto !important;
-        min-width: 0 !important;
-        max-width: none !important;
-        flex: none !important;
-    }
-
-    /* Compact-but-tappable card buttons (≥ 44pt iOS minimum). */
-    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
-        [data-testid="stButton"] > button {
-        height: 54px !important;
-        font-size: 14px !important;
-        padding: 4px 0 !important;
-        line-height: 1.1 !important;
-    }
-}
 
 /* === Recommendation banner: wrap on small screens ============================ */
 
@@ -318,53 +192,29 @@ def reset_hand() -> None:
 # ---------- Card grid component --------------------------------------------------
 
 def card_grid(state_key: str, max_count: int, disabled_cards: set[str]) -> None:
-    """Render a 4-row × 13-column grid where each card is a clickable button.
+    """Render the 52-card picker via the custom HTML component.
+
+    The component lives in an iframe with its own CSS, so Streamlit's mobile
+    column-stacking can't reach it. Click events come back as the new selection
+    list; we mirror that into session state and rerun on change.
 
     Args:
         state_key: session-state key holding a list[str] of selected cards.
         max_count: how many cards the user is allowed to pick at this step.
         disabled_cards: cards that can't be clicked (already used elsewhere).
     """
-    selected: list[str] = list(st.session_state.get(state_key, []))
+    current: list[str] = list(st.session_state.get(state_key, []))
 
-    with st.container():
-        # Marker div lets our scoped CSS target only this grid's buttons.
-        st.markdown(
-            '<div class="hm-card-grid-marker"></div>',
-            unsafe_allow_html=True,
-        )
+    new_selection = card_picker(
+        selected=current,
+        max_count=max_count,
+        disabled=disabled_cards,
+        key=f"picker_{state_key}",
+    )
 
-        for suit in SUITS:
-            cols = st.columns(13, gap="small")
-            for i, rank in enumerate(RANKS):
-                code = card_code(rank, suit)
-                is_selected = code in selected
-                is_used_elsewhere = code in disabled_cards and not is_selected
-
-                # Two-line label: rank on top, suit emoji below.
-                label = f"{rank}\n{SUIT_SYMBOLS_EMOJI[suit]}"
-                btn_type = "primary" if is_selected else "secondary"
-
-                with cols[i]:
-                    clicked = st.button(
-                        label,
-                        key=f"grid_{state_key}_{code}",
-                        type=btn_type,
-                        disabled=is_used_elsewhere,
-                        use_container_width=True,
-                        help=f"{rank} of {SUIT_LABELS[suit]}",
-                    )
-
-                if clicked:
-                    if is_selected:
-                        selected.remove(code)
-                    else:
-                        if len(selected) >= max_count:
-                            # Replace the oldest pick when the slot is full.
-                            selected.pop(0)
-                        selected.append(code)
-                    st.session_state[state_key] = selected
-                    st.rerun()
+    if new_selection != current:
+        st.session_state[state_key] = new_selection
+        st.rerun()
 
 
 # ---------- Recommendation rendering --------------------------------------------

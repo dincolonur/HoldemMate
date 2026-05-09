@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>HoldemMate card picker</title>
+<style>
+  :root {
+    --card-bg: #ffffff;
+    --card-border: #cbd5e1;
+    --card-border-hover: #2563eb;
+    --card-selected-bg: #dbeafe;
+    --card-selected-border: #2563eb;
+    --card-selected-text: #1e3a8a;
+    --card-text: #111827;
+    --suit-red: #dc2626;
+    --suit-black: #111827;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    color: var(--card-text);
+  }
+
+  /* Desktop default: 13 columns × 4 rows. */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(13, minmax(0, 1fr));
+    grid-template-rows: repeat(4, auto);
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .card {
+    height: 64px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.05;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 60ms ease, box-shadow 100ms ease,
+                background 100ms ease, border-color 100ms ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+
+  .card .rank {
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .card .suit {
+    font-size: 20px;
+    line-height: 1;
+    margin-top: 2px;
+  }
+
+  .card.red .suit { color: var(--suit-red); }
+  .card.black .suit { color: var(--suit-black); }
+
+  .card:hover:not(.disabled) {
+    border-color: var(--card-border-hover);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+    transform: translateY(-1px);
+  }
+
+  .card.selected {
+    background: var(--card-selected-bg);
+    border: 2px solid var(--card-selected-border);
+    color: var(--card-selected-text);
+  }
+
+  .card.disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* Mobile: 4 columns × 13 rows, fed column-by-column from the
+     suit-major render order, so each row shows the same rank
+     across all four suits. */
+  @media (max-width: 768px) {
+    .grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-rows: repeat(13, auto);
+      grid-auto-flow: column;
+      gap: 4px;
+    }
+    .card {
+      height: 54px;
+    }
+    .card .rank { font-size: 14px; }
+    .card .suit { font-size: 18px; }
+  }
+
+  @media (max-width: 380px) {
+    .card { height: 48px; }
+    .card .rank { font-size: 13px; }
+    .card .suit { font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+  <div id="grid" class="grid" role="grid" aria-label="Pick a card"></div>
+
+<script>
+  // ----- Constants -----------------------------------------------------------
+  const RANKS = ["2","3","4","5","6","7","8","9","T","J","Q","K","A"];
+  const SUITS = ["s","h","d","c"];
+  const SUIT_SYMBOL = { s: "♠", h: "♥", d: "♦", c: "♣" };
+  const SUIT_NAME   = { s: "Spades", h: "Hearts", d: "Diamonds", c: "Clubs" };
+  const SUIT_COLOR  = { s: "black",  h: "red",    d: "red",      c: "black" };
+  const RANK_NAME   = {
+    "2":"2","3":"3","4":"4","5":"5","6":"6","7":"7","8":"8","9":"9",
+    "T":"10","J":"Jack","Q":"Queen","K":"King","A":"Ace",
+  };
+
+  // ----- Component state -----------------------------------------------------
+  const state = {
+    selected: [],
+    max_count: 2,
+    disabled: new Set(),
+    ready: false,
+  };
+
+  // ----- Streamlit bridge ----------------------------------------------------
+  function postToStreamlit(message) {
+    window.parent.postMessage({ isStreamlitMessage: true, ...message }, "*");
+  }
+
+  function setValue(value) {
+    postToStreamlit({
+      type: "streamlit:setComponentValue",
+      value: value,
+      dataType: "json",
+    });
+  }
+
+  function setFrameHeight() {
+    // Read after a frame so the layout is settled.
+    requestAnimationFrame(() => {
+      const h = document.documentElement.scrollHeight;
+      postToStreamlit({
+        type: "streamlit:setFrameHeight",
+        height: h,
+      });
+    });
+  }
+
+  // ----- Rendering -----------------------------------------------------------
+  const grid = document.getElementById("grid");
+
+  function buildCard(rank, suit) {
+    const code = rank + suit;
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = "card " + SUIT_COLOR[suit];
+    el.dataset.code = code;
+    el.setAttribute("aria-label", RANK_NAME[rank] + " of " + SUIT_NAME[suit]);
+
+    const rankEl = document.createElement("div");
+    rankEl.className = "rank";
+    rankEl.textContent = rank;
+
+    const suitEl = document.createElement("div");
+    suitEl.className = "suit";
+    suitEl.textContent = SUIT_SYMBOL[suit];
+
+    el.appendChild(rankEl);
+    el.appendChild(suitEl);
+
+    el.addEventListener("click", () => onCardClick(code, el));
+    return el;
+  }
+
+  function applyState() {
+    const cards = grid.querySelectorAll(".card");
+    cards.forEach((el) => {
+      const code = el.dataset.code;
+      const isSelected = state.selected.indexOf(code) !== -1;
+      const isUsedElsewhere = state.disabled.has(code) && !isSelected;
+      el.classList.toggle("selected", isSelected);
+      el.classList.toggle("disabled", isUsedElsewhere);
+    });
+  }
+
+  function renderGridIfNeeded() {
+    if (grid.childElementCount > 0) return;
+    // Suit-major render order. CSS Grid auto-flow handles desktop vs mobile
+    // visual layout — the underlying DOM order stays the same.
+    for (const suit of SUITS) {
+      for (const rank of RANKS) {
+        grid.appendChild(buildCard(rank, suit));
+      }
+    }
+  }
+
+  function onCardClick(code, el) {
+    if (el.classList.contains("disabled")) return;
+    const idx = state.selected.indexOf(code);
+    if (idx >= 0) {
+      state.selected.splice(idx, 1);
+    } else {
+      if (state.selected.length >= state.max_count) {
+        state.selected.shift(); // drop oldest pick
+      }
+      state.selected.push(code);
+    }
+    applyState();
+    setValue([...state.selected]);
+  }
+
+  // ----- Receive args from Streamlit ----------------------------------------
+  window.addEventListener("message", (event) => {
+    const data = event.data;
+    if (!data || data.type !== "streamlit:render") return;
+
+    const args = data.args || {};
+    state.selected  = Array.isArray(args.selected) ? args.selected.slice() : [];
+    state.max_count = typeof args.max_count === "number" ? args.max_count : 2;
+    state.disabled  = new Set(Array.isArray(args.disabled) ? args.disabled : []);
+
+    renderGridIfNeeded();
+    applyState();
+    setFrameHeight();
+  });
+
+  // Resize iframe when the viewport changes (orientation change, etc.).
+  window.addEventListener("resize", setFrameHeight);
+
+  // ----- Tell Streamlit we're ready -----------------------------------------
+  postToStreamlit({
+    type: "streamlit:componentReady",
+    apiVersion: 1,
+  });
+</script>
+</body>
+</html>
