@@ -1,4 +1,11 @@
-"""Configuration: env loading + model defaults."""
+"""Configuration: env + Streamlit-secrets loading.
+
+Settings are read from (in order of precedence):
+1. Streamlit secrets (`st.secrets["KEY"]`) — used on Streamlit Community Cloud
+   when the secret is set in the app's *Secrets* UI.
+2. Environment variables (loaded from `.env` locally via python-dotenv).
+3. The default value passed in code.
+"""
 
 from __future__ import annotations
 
@@ -13,18 +20,35 @@ except ImportError:  # pragma: no cover - dotenv is optional in production
     pass
 
 
+def _read(key: str, default: str | None = None) -> str | None:
+    """Read a config value, preferring Streamlit secrets, then env vars."""
+    # st.secrets only works inside a Streamlit run, and raises if no
+    # secrets.toml is configured locally. Catch broadly so we silently fall
+    # back to env vars in tests, scripts, and local dev.
+    try:
+        import streamlit as st  # type: ignore
+
+        if key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return os.getenv(key, default)
+
+
 @dataclass(frozen=True)
 class Settings:
     anthropic_api_key: str | None
     model: str
     mc_trials: int
+    app_password: str | None  # If set, the Streamlit UI is gated behind this.
 
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
-            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
-            model=os.getenv("HOLDEMMATE_MODEL", "claude-sonnet-4-6"),
-            mc_trials=int(os.getenv("HOLDEMMATE_MC_TRIALS", "2000")),
+            anthropic_api_key=_read("ANTHROPIC_API_KEY"),
+            model=_read("HOLDEMMATE_MODEL", "claude-sonnet-4-6") or "claude-sonnet-4-6",
+            mc_trials=int(_read("HOLDEMMATE_MC_TRIALS", "2000") or "2000"),
+            app_password=_read("APP_PASSWORD"),
         )
 
 

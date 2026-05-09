@@ -30,6 +30,41 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+
+# ---------- Password gate -------------------------------------------------------
+#
+# When APP_PASSWORD is set (Streamlit secret on Cloud, or env var locally), the
+# whole UI is gated behind a single shared password. When unset, the app is
+# fully open — useful for local development and demos.
+
+def _require_password() -> None:
+    cfg = get_settings()
+    expected = cfg.app_password
+    if not expected:
+        return  # No password configured = open access.
+
+    if st.session_state.get("hm_auth_ok"):
+        return
+
+    st.title("🃏 HoldemMate")
+    st.caption("Multi-agent Texas Hold'em assistant")
+    st.write("This app is password-protected.")
+    pw = st.text_input(
+        "Password",
+        type="password",
+        key="hm_auth_input",
+    )
+    if pw:
+        if pw == expected:
+            st.session_state["hm_auth_ok"] = True
+            st.rerun()
+        else:
+            st.error("Wrong password.")
+    st.stop()
+
+
+_require_password()
+
 # ---------- Card-grid CSS --------------------------------------------------------
 #
 # We scope all "card button" styling to a Streamlit container that contains a
