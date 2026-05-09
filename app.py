@@ -85,15 +85,23 @@ CARD_GRID_CSS = """
 
 /* === Card grid (desktop defaults) ============================================ */
 
+/* Hide the marker entirely — it's only there as a hook for :has() selectors,
+   and we don't want it taking a grid cell on mobile or any visual space on
+   desktop. Robust against any future Streamlit DOM nesting changes. */
+.hm-card-grid-marker { display: none !important; }
+[data-testid="stMarkdownContainer"]:has(.hm-card-grid-marker) {
+    display: none !important;
+}
+
 /* Tighten the column gaps so 13 cards fit comfortably */
-[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
+[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
     [data-testid="stHorizontalBlock"] {
     gap: 4px !important;
     margin-bottom: 4px !important;
 }
 
 /* Each card button */
-[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
+[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
     [data-testid="stButton"] > button {
     width: 100% !important;
     min-width: 0 !important;
@@ -111,7 +119,7 @@ CARD_GRID_CSS = """
     transition: transform 0.05s ease, box-shadow 0.1s ease;
 }
 
-[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
+[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
     [data-testid="stButton"] > button:hover:not(:disabled) {
     border-color: var(--card-border-hover) !important;
     box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
@@ -119,9 +127,9 @@ CARD_GRID_CSS = """
 }
 
 /* Selected = primary kind */
-[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
+[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
     [data-testid="stButton"] > button[kind="primary"],
-[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
+[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
     [data-testid="stButton"] > button[kind="primaryFormSubmit"] {
     background: var(--card-selected-bg) !important;
     border: 2px solid var(--card-selected-border) !important;
@@ -129,7 +137,7 @@ CARD_GRID_CSS = """
 }
 
 /* Disabled = used elsewhere */
-[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
+[data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
     [data-testid="stButton"] > button:disabled {
     opacity: 0.3 !important;
     cursor: not-allowed !important;
@@ -154,7 +162,7 @@ CARD_GRID_CSS = """
  */
 
 @media (max-width: 768px) {
-    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker) {
+    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker) {
         display: grid !important;
         grid-template-columns: repeat(4, 1fr) !important;
         grid-template-rows: repeat(13, auto) !important;
@@ -166,20 +174,20 @@ CARD_GRID_CSS = """
 
     /* The marker div would otherwise occupy the first grid cell. Hide it from
        layout — :has() still recognises it in the DOM. */
-    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
+    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
         > [data-testid="stMarkdownContainer"]:first-child {
         display: none !important;
     }
 
     /* Flatten the suit-row flex containers so their children (stColumns)
        become direct grid items of the parent. */
-    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
+    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
         > [data-testid="stHorizontalBlock"] {
         display: contents !important;
     }
 
     /* Each column is now a grid cell — strip the flex sizing Streamlit gave it. */
-    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
+    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
         [data-testid="stColumn"] {
         width: auto !important;
         min-width: 0 !important;
@@ -188,7 +196,7 @@ CARD_GRID_CSS = """
     }
 
     /* Compact-but-tappable card buttons (≥ 44pt iOS minimum). */
-    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] > .hm-card-grid-marker)
+    [data-testid="stVerticalBlock"]:has(> [data-testid="stMarkdownContainer"] .hm-card-grid-marker)
         [data-testid="stButton"] > button {
         height: 54px !important;
         font-size: 14px !important;
