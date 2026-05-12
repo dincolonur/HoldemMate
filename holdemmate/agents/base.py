@@ -25,15 +25,46 @@ def call_claude(
     *,
     max_tokens: int = 800,
     temperature: float = 0.4,
+    cache_system: bool = True,
 ) -> str:
-    """Send a single-turn message to Claude and return the text response."""
+    """Send a single-turn message to Claude and return the text response.
+
+    Args:
+        system: System prompt. By default it's marked as cacheable, so when
+            the same system prompt is reused across calls within ~5 minutes,
+            the input tokens are billed at ~10% of the normal rate and the
+            time-to-first-token is reduced.
+        user: User message.
+        max_tokens: Cap on output tokens.
+        temperature: Sampling temperature.
+        cache_system: If True (default), sends the system prompt as a
+            cache-marked content block. Set False to disable per call.
+    """
     settings = get_settings()
     client = get_client()
+
+    # Prompt caching uses the "structured" form of the system parameter — a
+    # list of content blocks rather than a plain string. The block carries
+    # cache_control={"type": "ephemeral"}, which marks it cacheable for
+    # ~5 minutes. Subsequent calls with the *exact* same system text get a
+    # cache hit. Falling back to the plain-string form keeps things simple
+    # when caching isn't desired (e.g., one-off prompts).
+    if cache_system:
+        system_param: Any = [
+            {
+                "type": "text",
+                "text": system,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+    else:
+        system_param = system
+
     msg = client.messages.create(
         model=settings.model,
         max_tokens=max_tokens,
         temperature=temperature,
-        system=system,
+        system=system_param,
         messages=[{"role": "user", "content": user}],
     )
     parts: list[str] = []

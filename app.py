@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import streamlit as st
 
+from holdemmate.agents.math_agent import run_math
+from holdemmate.agents.opponent_agent import run_opponent
+from holdemmate.agents.strategy_agent import run_strategy
 from holdemmate.card_picker import card_picker
 from holdemmate.cards import pretty_html
 from holdemmate.config import get_settings
 from holdemmate.game_state import GameState
-from holdemmate.graph import recommend
 
 st.set_page_config(
     page_title="HoldemMate",
@@ -431,22 +433,54 @@ with right:
             st.rerun()
 
 if run:
-    with st.spinner("Math, Opponent, Strategy, and Coach agents thinking…"):
-        game = GameState(
-            hole_cards=list(st.session_state["hole_cards"]),
-            board=board_now(),
-            num_opponents=int(st.session_state["num_opponents"]),
-            pot=float(st.session_state["pot"]),
-            to_call=float(st.session_state["to_call"]),
-            hero_stack=float(st.session_state["hero_stack"]),
-            position=st.session_state["position"],
-            action_history=[h["action"] for h in st.session_state["history"]],
-        )
+    game = GameState(
+        hole_cards=list(st.session_state["hole_cards"]),
+        board=board_now(),
+        num_opponents=int(st.session_state["num_opponents"]),
+        pot=float(st.session_state["pot"]),
+        to_call=float(st.session_state["to_call"]),
+        hero_stack=float(st.session_state["hero_stack"]),
+        position=st.session_state["position"],
+        action_history=[h["action"] for h in st.session_state["history"]],
+    )
+
+    result = None
+    # Inline the pipeline so we can update the UI between agent calls.
+    # `st.status` shows an expandable status box with live sub-steps — way
+    # better perceived speed than a single anonymous spinner.
+    with st.status("Running agents…", expanded=True) as status:
         try:
-            result = recommend(game)
+            st.write("⚙️  Computing equity (Monte Carlo)…")
+            math = run_math(game)
+            st.write(
+                f"✓ Equity **{math['equity_value']:.1f}%** "
+                f"— made hand: {math['made_hand']}"
+            )
+
+            st.write("🔍 Reading opponent…")
+            opponent = run_opponent(game, math)
+            st.write(
+                f"✓ Opponent read: *{opponent.get('tightness', 'balanced')}* — "
+                f"{opponent.get('likely_range', 'unknown range')}"
+            )
+
+            st.write("🧠 Deciding action…")
+            strategy = run_strategy(game, math, opponent)
+            st.write(f"✓ **{strategy['action']}** ({strategy.get('confidence', 0):.0%})")
+
+            result = {
+                "math": math,
+                "opponent": opponent,
+                "strategy": strategy,
+                # Coach text now comes bundled into the merged Strategy call.
+                "coach": strategy.get(
+                    "coaching_note", strategy.get("rationale", "")
+                ),
+            }
+            status.update(label="Done.", state="complete", expanded=False)
         except Exception as exc:  # noqa: BLE001
+            status.update(label=f"Pipeline error: {exc}", state="error")
             st.error(f"Pipeline error: {exc}")
-            result = None
 
     if result is not None:
         st.session_state["last_result"] = result

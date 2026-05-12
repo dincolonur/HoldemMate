@@ -46,7 +46,12 @@ class Settings:
     def from_env(cls) -> "Settings":
         return cls(
             anthropic_api_key=_read("ANTHROPIC_API_KEY"),
-            model=_read("HOLDEMMATE_MODEL", "claude-sonnet-4-6") or "claude-sonnet-4-6",
+            # Default to Haiku for speed/cost. Override via env or Streamlit secret
+            # for stronger reasoning at the cost of latency:
+            #   HOLDEMMATE_MODEL=claude-sonnet-4-6
+            #   HOLDEMMATE_MODEL=claude-opus-4-6
+            model=_read("HOLDEMMATE_MODEL", "claude-haiku-4-5-20251001")
+            or "claude-haiku-4-5-20251001",
             mc_trials=int(_read("HOLDEMMATE_MC_TRIALS", "2000") or "2000"),
             app_password=_read("APP_PASSWORD"),
         )
